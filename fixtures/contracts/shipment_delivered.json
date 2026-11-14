@@ -1,0 +1,11 @@
+{
+  "event": "ShipmentDelivered",
+  "producer": "delivery-service",
+  "consumer": "order-service",
+  "fields": {
+    "shipment_id": "string",
+    "order_id": "string",
+    "delivered_at": "RFC3339 timestamp"
+  },
+  "delivery": "at-least-once"
+}

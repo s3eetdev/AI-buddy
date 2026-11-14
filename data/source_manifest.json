@@ -1,0 +1,128 @@
+[
+  {
+    "id": "cancel-handler",
+    "scope": "demo",
+    "path": "fixtures/order-service/internal/handlers/cancel_order.go",
+    "kind": "code"
+  },
+  {
+    "id": "cancel-contract",
+    "scope": "demo",
+    "path": "fixtures/contracts/order_cancelled.json",
+    "kind": "contract"
+  },
+  {
+    "id": "notification-consumer",
+    "scope": "demo",
+    "path": "fixtures/notification-service/internal/consumers/order_cancelled.go",
+    "kind": "code"
+  },
+  {
+    "id": "architecture",
+    "scope": "demo",
+    "path": "fixtures/docs/architecture.md",
+    "kind": "documentation"
+  },
+  {
+    "id": "notification-test",
+    "scope": "demo",
+    "path": "fixtures/notification-service/tests/cancellation_test.txt",
+    "kind": "test"
+  },
+  {
+    "id": "catalog",
+    "scope": "demo",
+    "path": "fixtures/catalog/services.json",
+    "kind": "catalog"
+  },
+  {
+    "id": "restricted",
+    "scope": "restricted",
+    "path": "fixtures/private/design.md",
+    "kind": "documentation"
+  },
+  {
+    "id": "cancel-decision",
+    "kind": "documentation",
+    "path": "fixtures/docs/cancellation_decision.md",
+    "scope": "demo"
+  },
+  {
+    "id": "mailer",
+    "kind": "code",
+    "path": "fixtures/notification-service/internal/mailer/mailer.go",
+    "scope": "demo"
+  },
+  {
+    "id": "local-run",
+    "kind": "documentation",
+    "path": "fixtures/docs/local_run.md",
+    "scope": "demo"
+  },
+  {
+    "id": "delivery-handler",
+    "kind": "code",
+    "path": "fixtures/delivery-service/internal/handlers/delivered.go",
+    "scope": "demo"
+  },
+  {
+    "id": "delivery-consumer",
+    "kind": "code",
+    "path": "fixtures/order-service/internal/consumers/shipment_delivered.go",
+    "scope": "demo"
+  },
+  {
+    "id": "delivery-contract",
+    "kind": "contract",
+    "path": "fixtures/contracts/shipment_delivered.json",
+    "scope": "demo"
+  },
+  {
+    "id": "delivery-decision",
+    "kind": "documentation",
+    "path": "fixtures/docs/delivery_decision.md",
+    "scope": "demo"
+  },
+  {
+    "id": "delivery-test",
+    "kind": "test",
+    "path": "fixtures/order-service/tests/delivery_test.txt",
+    "scope": "demo"
+  },
+  {
+    "id": "stock-handler",
+    "kind": "code",
+    "path": "fixtures/inventory-service/internal/handlers/stock.go",
+    "scope": "demo"
+  },
+  {
+    "id": "stock-contract",
+    "kind": "contract",
+    "path": "fixtures/contracts/stock_adjusted.json",
+    "scope": "demo"
+  },
+  {
+    "id": "inventory-doc",
+    "kind": "documentation",
+    "path": "fixtures/docs/inventory.md",
+    "scope": "demo"
+  },
+  {
+    "id": "previous-task",
+    "kind": "documentation",
+    "path": "fixtures/docs/previous_task.md",
+    "scope": "demo"
+  },
+  {
+    "id": "legacy-policy",
+    "kind": "documentation",
+    "path": "fixtures/legacy/cancellation_policy.md",
+    "scope": "legacy"
+  },
+  {
+    "id": "injection-comment",
+    "kind": "documentation",
+    "path": "fixtures/adversarial/old_issue.md",
+    "scope": "adversarial"
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "order-service": {
+    "team": "orders",
+    "events": [
+      "OrderCancelled"
+    ]
+  },
+  "notification-service": {
+    "team": "messaging",
+    "consumes": [
+      "OrderCancelled"
+    ]
+  }
+}

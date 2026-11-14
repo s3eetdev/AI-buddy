@@ -1,0 +1,190 @@
+{
+  "task_id": "DEMO-5",
+  "status": "needs_clarification",
+  "plan": {
+    "summary": "Задача DEMO-5 требует отправки email покупателю при отмене заказа продавцом (seller_cancelled), однако легаси-документ cancellation_policy.md со статусом approved запрещает такие уведомления. Приоритет между этими требованиями не определён, что создаёт прямой конфликт. Текущая реализация в notification-service игнорирует событие seller_cancelled, отправляя письма только для payment_expired.",
+    "findings": [
+      {
+        "kind": "fact",
+        "role": "context",
+        "explanation": "Критерий приёмки задачи DEMO-5 явно требует отправки email покупателю при причине отмены 'seller_cancelled'.",
+        "citations": [
+          {
+            "source_id": "task:DEMO-5",
+            "start_line": 5,
+            "end_line": 5,
+            "quote": "При seller_cancelled покупатель должен получить email."
+          }
+        ]
+      },
+      {
+        "kind": "fact",
+        "role": "context",
+        "explanation": "Документ legacy/cancellation_policy.md со статусом approved запрещает отправку уведомлений покупателю при seller_cancelled для той же задачи DEMO-5.",
+        "citations": [
+          {
+            "source_id": "legacy-policy",
+            "start_line": 3,
+            "end_line": 3,
+            "quote": "Для DEMO-5 при seller_cancelled уведомления покупателю запрещены."
+          }
+        ]
+      },
+      {
+        "kind": "fact",
+        "role": "context",
+        "explanation": "В самом документе с запретом указано, что приоритет относительно критериев задачи не определён, и требуется запросить решение наставника.",
+        "citations": [
+          {
+            "source_id": "legacy-policy",
+            "start_line": 4,
+            "end_line": 5,
+            "quote": "Приоритет этого документа относительно критериев DEMO-5 не указан.\nНельзя молча выбрать одно из противоречащих требований: запросить решение наставника."
+          }
+        ]
+      },
+      {
+        "kind": "fact",
+        "role": "entry_point",
+        "explanation": "Сервис order-service публикует событие OrderCancelled с полем reason='seller_cancelled' при отмене заказа продавцом.",
+        "citations": [
+          {
+            "source_id": "cancel-handler",
+            "start_line": 4,
+            "end_line": 4,
+            "quote": "return bus.Publish(\"OrderCancelled\", OrderCancelled{OrderID: order.ID, BuyerID: order.BuyerID, Reason: \"seller_cancelled\"})"
+          }
+        ]
+      },
+      {
+        "kind": "fact",
+        "role": "change_candidate",
+        "explanation": "Текущий обработчик в notification-service пропускает события с reason != 'payment_expired', то есть не отправляет email для seller_cancelled.",
+        "citations": [
+          {
+            "source_id": "notification-consumer",
+            "start_line": 4,
+            "end_line": 4,
+            "quote": "if event.Reason != \"payment_expired\" { return nil }"
+          }
+        ]
+      },
+      {
+        "kind": "hypothesis",
+        "role": "relationship",
+        "explanation": "Существующий контракт OrderCancelled содержит поле buyer_id, необходимое для отправки email, поэтому техническая возможность реализации требования из критериев существует без изменения схемы данных.",
+        "citations": [
+          {
+            "source_id": "cancel-contract",
+            "start_line": 7,
+            "end_line": 7,
+            "quote": "\"buyer_id\": \"string\","
+          }
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "action": "Проанализировать текущую логику фильтрации событий в notification-service, чтобы подтвердить, что seller_cancelled действительно игнорируется.",
+        "source_ids": [
+          "notification-consumer"
+        ],
+        "expected_result": "Подтверждено, что код возвращает nil для всех причин, кроме payment_expired."
+      },
+      {
+        "action": "Сравнить требования acceptance_criteria задачи DEMO-5 и правила из документа legacy/cancellation_policy.md для фиксации конфликта.",
+        "source_ids": [
+          "task:DEMO-5",
+          "legacy-policy"
+        ],
+        "expected_result": "Явно зафиксировано противоречие: задача требует email, документ запрещает его."
+      },
+      {
+        "action": "Сформулировать вопрос наставнику о приоритете требований, так как источники не содержат решения конфликта.",
+        "source_ids": [],
+        "expected_result": "Готовый вопрос для уточнения у ментора."
+      }
+    ],
+    "questions": [
+      "Какой из источников имеет приоритет для задачи DEMO-5: критерий приёмки (требуется email) или документ legacy/cancellation_policy.md (запрещает уведомления)?",
+      "Если приоритет у критерия приёмки, следует ли обновить документ cancellation_policy.md, чтобы он больше не считался актуальным ограничением?"
+    ],
+    "limitations": [
+      "Источники не определяют, какой из двух противоречащих требований является верным для реализации.",
+      "Нет информации о том, нужно ли реализовать дедупликацию сообщений для seller_cancelled, как это было сделано для DEMO-1.",
+      "Неясно, влияет ли этот конфликт на другие типы отмен (например, payment_expired)."
+    ]
+  },
+  "sources": [
+    {
+      "id": "legacy-policy",
+      "scope": "legacy",
+      "path": "fixtures/legacy/cancellation_policy.md",
+      "kind": "documentation",
+      "content": "# DEMO-5: спорное правило отмены\nСинтетический документ для проверки противоречий. Статус: approved.\nДля DEMO-5 при seller_cancelled уведомления покупателю запрещены.\nПриоритет этого документа относительно критериев DEMO-5 не указан.\nНельзя молча выбрать одно из противоречащих требований: запросить решение наставника.\n"
+    },
+    {
+      "id": "architecture",
+      "scope": "demo",
+      "path": "fixtures/docs/architecture.md",
+      "kind": "documentation",
+      "content": "# Synthetic demo: cancellation / отмена заказа\norder-service publishes OrderCancelled after cancellation.\nnotification-service subscribes to OrderCancelled and sends email for payment_expired.\nSeller cancellation currently does not send email.\nBuyerID is present in the contract.\nDelivery is at-least-once; consumer deduplication is not implemented in this fixture.\nОбщие правила новой отмены не заданы: используйте критерии конкретной задачи.\nДля DEMO-1 согласованные требования находятся в cancellation_decision.md.\nThese fixtures are not Avito policies or production code.\n"
+    },
+    {
+      "id": "cancel-contract",
+      "scope": "demo",
+      "path": "fixtures/contracts/order_cancelled.json",
+      "kind": "contract",
+      "content": "{\n  \"event\": \"OrderCancelled\",\n  \"producer\": \"order-service\",\n  \"consumer\": \"notification-service\",\n  \"fields\": {\n    \"order_id\": \"string\",\n    \"buyer_id\": \"string\",\n    \"reason\": \"string\"\n  },\n  \"delivery\": \"at-least-once\"\n}"
+    },
+    {
+      "id": "cancel-handler",
+      "scope": "demo",
+      "path": "fixtures/order-service/internal/handlers/cancel_order.go",
+      "kind": "code",
+      "content": "package handlers\n// CancelOrder handles seller cancellation.\nfunc CancelOrder(order Order, bus Bus) error {\n    return bus.Publish(\"OrderCancelled\", OrderCancelled{OrderID: order.ID, BuyerID: order.BuyerID, Reason: \"seller_cancelled\"})\n}"
+    },
+    {
+      "id": "notification-consumer",
+      "scope": "demo",
+      "path": "fixtures/notification-service/internal/consumers/order_cancelled.go",
+      "kind": "code",
+      "content": "package consumers\n// Subscribed to OrderCancelled.\nfunc OnOrderCancelled(event OrderCancelled, mail Mailer) error {\n    if event.Reason != \"payment_expired\" { return nil }\n    return mail.Send(event.BuyerID, \"order_cancelled\", event.OrderID)\n}"
+    },
+    {
+      "id": "cancel-decision",
+      "scope": "demo",
+      "path": "fixtures/docs/cancellation_decision.md",
+      "kind": "documentation",
+      "content": "# DEMO-1: согласованное изменение отмены заказа\nСинтетическое решение команды, не регламент Авито.\nОбласть действия: только DEMO-1. Для других задач каналы нужно уточнять.\nПри OrderCancelled с reason=seller_cancelled отправлять покупателю email.\nИспользовать существующий шаблон order_cancelled и поле buyer_id.\nСохранить текущее уведомление payment_expired без изменения.\nОстальные причины не должны отправлять уведомления.\nПовторная доставка одного order_id + reason не должна отправлять второе письмо.\nЗащита от повторов должна быть в notification-service, а не в order-service.\nПодготовить план изменения и тестирования; код автоматически не изменять.\n"
+    },
+    {
+      "id": "delivery-decision",
+      "scope": "demo",
+      "path": "fixtures/docs/delivery_decision.md",
+      "kind": "documentation",
+      "content": "# DEMO-3: статус заказа после доставки\nСинтетическая спецификация, не регламент Авито.\ndelivery-service публикует ShipmentDelivered, order-service принимает это событие.\nТекущее поведение OnShipmentDelivered: записывает delivered_at, но не меняет статус.\nТребование: перевести заказ shipped → delivered и сохранить delivered_at атомарно.\nЗаказ delivered при повторном событии не менять; событие подтвердить без ошибки.\nЗаказы cancelled игнорировать: поздняя доставка не должна отменять отмену заказа.\nСобытие для неизвестного order_id направлять в dead-letter, не создавать заказ.\nУведомления покупателю и изменение inventory-service в DEMO-3 не входят.\n"
+    },
+    {
+      "id": "local-run",
+      "scope": "demo",
+      "path": "fixtures/docs/local_run.md",
+      "kind": "documentation",
+      "content": "# Локальный стенд синтетического маркетплейса\nЭто описание вымышленной системы для чтения AI, не команда запуска сервисов.\norder-service: создание и отмена заказа; команда orders.\ndelivery-service: статусы отправления; команда logistics.\nnotification-service: email-уведомления; команда messaging.\ninventory-service: остатки товаров; команда catalog.\nOrderCancelled связывает order-service и notification-service.\nShipmentDelivered связывает delivery-service и order-service.\nStockAdjusted относится к остаткам, а не к отмене заказа или доставке.\nGo-файлы в fixtures — учебные фрагменты, отдельные исполняемые микросервисы не поставляются.\n"
+    },
+    {
+      "id": "task:DEMO-5",
+      "scope": "demo",
+      "path": "input/task/DEMO-5",
+      "kind": "documentation",
+      "content": "Задача: DEMO-5\nОтмена seller_cancelled: конфликт требований\nДля DEMO-5 критерий задачи требует email, но approved-документ legacy/cancellation_policy.md запрещает уведомления. Приоритет не определён. Сначала установи противоречие, затем предложи вопрос наставнику.\nКритерии приёмки:\nПри seller_cancelled покупатель должен получить email.\nУточнение пользователя:\n"
+    }
+  ],
+  "model": "qwen/qwen3.8-flash",
+  "usage": {
+    "prompt_tokens": 9948,
+    "completion_tokens": 2677,
+    "total_tokens": 12625
+  },
+  "jira_markdown": "# План изучения задачи\n\nЗадача DEMO-5 требует отправки email покупателю при отмене заказа продавцом (seller_cancelled), однако легаси-документ cancellation_policy.md со статусом approved запрещает такие уведомления. Приоритет между этими требованиями не определён, что создаёт прямой конфликт. Текущая реализация в notification-service игнорирует событие seller_cancelled, отправляя письма только для payment_expired.\n\n- [fact/context] Критерий приёмки задачи DEMO-5 явно требует отправки email покупателю при причине отмены 'seller_cancelled'.\n\n  Источник: input/task/DEMO-5:5-5\n  При seller_cancelled покупатель должен получить email.\n\n- [fact/context] Документ legacy/cancellation_policy.md со статусом approved запрещает отправку уведомлений покупателю при seller_cancelled для той же задачи DEMO-5.\n\n  Источник: fixtures/legacy/cancellation_policy.md:3-3\n  Для DEMO-5 при seller_cancelled уведомления покупателю запрещены.\n\n- [fact/context] В самом документе с запретом указано, что приоритет относительно критериев задачи не определён, и требуется запросить решение наставника.\n\n  Источник: fixtures/legacy/cancellation_policy.md:4-5\n  Приоритет этого документа относительно критериев DEMO-5 не указан.\nНельзя молча выбрать одно из противоречащих требований: запросить решение наставника.\n\n- [fact/entry_point] Сервис order-service публикует событие OrderCancelled с полем reason='seller_cancelled' при отмене заказа продавцом.\n\n  Источник: fixtures/order-service/internal/handlers/cancel_order.go:4-4\n  return bus.Publish(\"OrderCancelled\", OrderCancelled{OrderID: order.ID, BuyerID: order.BuyerID, Reason: \"seller_cancelled\"})\n\n- [fact/change_candidate] Текущий обработчик в notification-service пропускает события с reason != 'payment_expired', то есть не отправляет email для seller_cancelled.\n\n  Источник: fixtures/notification-service/internal/consumers/order_cancelled.go:4-4\n  if event.Reason != \"payment_expired\" { return nil }\n\n- [hypothesis/relationship] Существующий контракт OrderCancelled содержит поле buyer_id, необходимое для отправки email, поэтому техническая возможность реализации требования из критериев существует без изменения схемы данных.\n\n  Источник: fixtures/contracts/order_cancelled.json:7-7\n  \"buyer_id\": \"string\",\n\n## Следующие шаги\n\n- [ ] Проанализировать текущую логику фильтрации событий в notification-service, чтобы подтвердить, что seller_cancelled действительно игнорируется.\n  Результат: Подтверждено, что код возвращает nil для всех причин, кроме payment_expired.\n\n- [ ] Сравнить требования acceptance_criteria задачи DEMO-5 и правила из документа legacy/cancellation_policy.md для фиксации конфликта.\n  Результат: Явно зафиксировано противоречие: задача требует email, документ запрещает его.\n\n- [ ] Сформулировать вопрос наставнику о приоритете требований, так как источники не содержат решения конфликта.\n  Результат: Готовый вопрос для уточнения у ментора.\n\n## Вопросы наставнику\n\n- Какой из источников имеет приоритет для задачи DEMO-5: критерий приёмки (требуется email) или документ legacy/cancellation_policy.md (запрещает уведомления)?\n\n- Если приоритет у критерия приёмки, следует ли обновить документ cancellation_policy.md, чтобы он больше не считался актуальным ограничением?\n\n## Ограничения\n\n- Источники не определяют, какой из двух противоречащих требований является верным для реализации.\n\n- Нет информации о том, нужно ли реализовать дедупликацию сообщений для seller_cancelled, как это было сделано для DEMO-1.\n\n- Неясно, влияет ли этот конфликт на другие типы отмен (например, payment_expired)."
+}

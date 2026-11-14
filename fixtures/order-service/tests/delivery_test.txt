@@ -1,0 +1,6 @@
+Synthetic behavioral tests for ShipmentDelivered:
+Current: order shipped stays shipped, delivered_at is recorded (known defect).
+Target: shipped -> delivered with delivered_at in one transaction.
+Target: duplicate event for delivered -> no-op.
+Target: event for cancelled -> no-op, status remains cancelled.
+Target: unknown order_id -> dead-letter, no new order.

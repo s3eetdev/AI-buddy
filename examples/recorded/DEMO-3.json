@@ -1,0 +1,178 @@
+{
+  "task_id": "DEMO-3",
+  "status": "ready",
+  "plan": {
+    "summary": "Задача DEMO-3 требует исправить обработчик события ShipmentDelivered в order-service. Текущая реализация записывает время доставки (delivered_at), но не меняет статус заказа с shipped на delivered. Необходимо обеспечить атомарное изменение статуса и времени, корректную обработку повторных событий и отменённых заказов (no-op), а также маршрутизацию неизвестных заказов в dead-letter queue.",
+    "findings": [
+      {
+        "kind": "fact",
+        "role": "entry_point",
+        "explanation": "Событие ShipmentDelivered публикуется сервисом delivery-service после подтверждения доставки.",
+        "citations": [
+          {
+            "source_id": "delivery-handler",
+            "start_line": 4,
+            "end_line": 10,
+            "quote": "func MarkDelivered(shipment Shipment, bus Bus) error {\n    return bus.Publish(\"ShipmentDelivered\", ShipmentDelivered{\n        ShipmentID: shipment.ID,\n        OrderID: shipment.OrderID,\n        DeliveredAt: shipment.DeliveredAt,\n    })\n}"
+          },
+          {
+            "source_id": "delivery-contract",
+            "start_line": 2,
+            "end_line": 4,
+            "quote": "\"event\": \"ShipmentDelivered\",\n  \"producer\": \"delivery-service\",\n  \"consumer\": \"order-service\","
+          }
+        ]
+      },
+      {
+        "kind": "fact",
+        "role": "change_candidate",
+        "explanation": "Текущий обработчик OnShipmentDelivered в order-service вызывает только SetDeliveredAt, что является причиной дефекта: статус остаётся 'shipped'.",
+        "citations": [
+          {
+            "source_id": "delivery-consumer",
+            "start_line": 4,
+            "end_line": 7,
+            "quote": "func OnShipmentDelivered(event ShipmentDelivered, orders Store) error {\n    // Current defect: records time but leaves status as shipped.\n    return orders.SetDeliveredAt(event.OrderID, event.DeliveredAt)\n}"
+          },
+          {
+            "source_id": "delivery-decision",
+            "start_line": 4,
+            "end_line": 5,
+            "quote": "Текущее поведение OnShipmentDelivered: записывает delivered_at, но не меняет статус.\nТребование: перевести заказ shipped → delivered и сохранить delivered_at атомарно."
+          }
+        ]
+      },
+      {
+        "kind": "fact",
+        "role": "context",
+        "explanation": "Контракт события определяет поля shipment_id, order_id и delivered_at, а также гарантию доставки at-least-once, что требует идемпотентности обработки.",
+        "citations": [
+          {
+            "source_id": "delivery-contract",
+            "start_line": 5,
+            "end_line": 10,
+            "quote": "\"fields\": {\n    \"shipment_id\": \"string\",\n    \"order_id\": \"string\",\n    \"delivered_at\": \"RFC3339 timestamp\"\n  },\n  \"delivery\": \"at-least-once\""
+          }
+        ]
+      },
+      {
+        "kind": "fact",
+        "role": "relationship",
+        "explanation": "Связь между сервисами подтверждается контрактом: producer — delivery-service, consumer — order-service.",
+        "citations": [
+          {
+            "source_id": "delivery-contract",
+            "start_line": 3,
+            "end_line": 4,
+            "quote": "\"producer\": \"delivery-service\",\n  \"consumer\": \"order-service\","
+          }
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "action": "Изучить интерфейс Store в order-service, чтобы найти или создать метод для атомарного обновления статуса и времени доставки.",
+        "source_ids": [],
+        "expected_result": "Понимание того, как реализовать транзакционное обновление полей status и delivered_at."
+      },
+      {
+        "action": "Модифицировать OnShipmentDelivered так, чтобы он проверял текущий статус заказа перед обновлением.",
+        "source_ids": [
+          "delivery-decision"
+        ],
+        "expected_result": "Логика, которая пропускает обновление, если статус уже 'delivered' или 'cancelled'."
+      },
+      {
+        "action": "Реализовать обработку случая, когда order_id не найден в базе данных.",
+        "source_ids": [
+          "delivery-decision"
+        ],
+        "expected_result": "Отправка сообщения в dead-letter queue вместо создания нового заказа или ошибки."
+      },
+      {
+        "action": "Написать тесты для проверки идемпотентности (повторная доставка) и корректной реакции на отменённые заказы.",
+        "source_ids": [
+          "task:DEMO-3"
+        ],
+        "expected_result": "Тесты проходят, подтверждая отсутствие изменений при повторных событиях и для cancelled заказов."
+      }
+    ],
+    "questions": [],
+    "limitations": [
+      "Не предоставлен код интерфейса Store, поэтому конкретные методы для атомарного обновления неизвестны.",
+      "Не указано, какой механизм используется для dead-letter queue (например, RabbitMQ DLQ или Kafka topic)."
+    ]
+  },
+  "sources": [
+    {
+      "id": "delivery-decision",
+      "scope": "demo",
+      "path": "fixtures/docs/delivery_decision.md",
+      "kind": "documentation",
+      "content": "# DEMO-3: статус заказа после доставки\nСинтетическая спецификация, не регламент Авито.\ndelivery-service публикует ShipmentDelivered, order-service принимает это событие.\nТекущее поведение OnShipmentDelivered: записывает delivered_at, но не меняет статус.\nТребование: перевести заказ shipped → delivered и сохранить delivered_at атомарно.\nЗаказ delivered при повторном событии не менять; событие подтвердить без ошибки.\nЗаказы cancelled игнорировать: поздняя доставка не должна отменять отмену заказа.\nСобытие для неизвестного order_id направлять в dead-letter, не создавать заказ.\nУведомления покупателю и изменение inventory-service в DEMO-3 не входят.\n"
+    },
+    {
+      "id": "cancel-decision",
+      "scope": "demo",
+      "path": "fixtures/docs/cancellation_decision.md",
+      "kind": "documentation",
+      "content": "# DEMO-1: согласованное изменение отмены заказа\nСинтетическое решение команды, не регламент Авито.\nОбласть действия: только DEMO-1. Для других задач каналы нужно уточнять.\nПри OrderCancelled с reason=seller_cancelled отправлять покупателю email.\nИспользовать существующий шаблон order_cancelled и поле buyer_id.\nСохранить текущее уведомление payment_expired без изменения.\nОстальные причины не должны отправлять уведомления.\nПовторная доставка одного order_id + reason не должна отправлять второе письмо.\nЗащита от повторов должна быть в notification-service, а не в order-service.\nПодготовить план изменения и тестирования; код автоматически не изменять.\n"
+    },
+    {
+      "id": "cancel-contract",
+      "scope": "demo",
+      "path": "fixtures/contracts/order_cancelled.json",
+      "kind": "contract",
+      "content": "{\n  \"event\": \"OrderCancelled\",\n  \"producer\": \"order-service\",\n  \"consumer\": \"notification-service\",\n  \"fields\": {\n    \"order_id\": \"string\",\n    \"buyer_id\": \"string\",\n    \"reason\": \"string\"\n  },\n  \"delivery\": \"at-least-once\"\n}"
+    },
+    {
+      "id": "cancel-handler",
+      "scope": "demo",
+      "path": "fixtures/order-service/internal/handlers/cancel_order.go",
+      "kind": "code",
+      "content": "package handlers\n// CancelOrder handles seller cancellation.\nfunc CancelOrder(order Order, bus Bus) error {\n    return bus.Publish(\"OrderCancelled\", OrderCancelled{OrderID: order.ID, BuyerID: order.BuyerID, Reason: \"seller_cancelled\"})\n}"
+    },
+    {
+      "id": "notification-consumer",
+      "scope": "demo",
+      "path": "fixtures/notification-service/internal/consumers/order_cancelled.go",
+      "kind": "code",
+      "content": "package consumers\n// Subscribed to OrderCancelled.\nfunc OnOrderCancelled(event OrderCancelled, mail Mailer) error {\n    if event.Reason != \"payment_expired\" { return nil }\n    return mail.Send(event.BuyerID, \"order_cancelled\", event.OrderID)\n}"
+    },
+    {
+      "id": "delivery-contract",
+      "scope": "demo",
+      "path": "fixtures/contracts/shipment_delivered.json",
+      "kind": "contract",
+      "content": "{\n  \"event\": \"ShipmentDelivered\",\n  \"producer\": \"delivery-service\",\n  \"consumer\": \"order-service\",\n  \"fields\": {\n    \"shipment_id\": \"string\",\n    \"order_id\": \"string\",\n    \"delivered_at\": \"RFC3339 timestamp\"\n  },\n  \"delivery\": \"at-least-once\"\n}\n"
+    },
+    {
+      "id": "delivery-handler",
+      "scope": "demo",
+      "path": "fixtures/delivery-service/internal/handlers/delivered.go",
+      "kind": "code",
+      "content": "package handlers\n\n// Synthetic fragment: подтверждение доставки отправления.\nfunc MarkDelivered(shipment Shipment, bus Bus) error {\n    return bus.Publish(\"ShipmentDelivered\", ShipmentDelivered{\n        ShipmentID: shipment.ID,\n        OrderID: shipment.OrderID,\n        DeliveredAt: shipment.DeliveredAt,\n    })\n}\n"
+    },
+    {
+      "id": "delivery-consumer",
+      "scope": "demo",
+      "path": "fixtures/order-service/internal/consumers/shipment_delivered.go",
+      "kind": "code",
+      "content": "package consumers\n\n// Synthetic fragment. Subscription: ShipmentDelivered.\nfunc OnShipmentDelivered(event ShipmentDelivered, orders Store) error {\n    // Current defect: records time but leaves status as shipped.\n    return orders.SetDeliveredAt(event.OrderID, event.DeliveredAt)\n}\n"
+    },
+    {
+      "id": "task:DEMO-3",
+      "scope": "demo",
+      "path": "input/task/DEMO-3",
+      "kind": "documentation",
+      "content": "Задача: DEMO-3\nПосле доставки заказ остаётся в статусе shipped\nПроследить ShipmentDelivered от delivery-service до order-service. OnShipmentDelivered записывает время доставки, но статус не меняется. Подготовить план по delivery_decision.md.\nКритерии приёмки:\nАтомарно изменить shipped на delivered и записать delivered_at.\nПовтор delivered и событие для cancelled — no-op.\nНеизвестный order_id — dead-letter; уведомления и остатки не изменять.\nУточнение пользователя:\n"
+    }
+  ],
+  "model": "qwen/qwen3.8-flash",
+  "usage": {
+    "prompt_tokens": 4428,
+    "completion_tokens": 1299,
+    "total_tokens": 5727
+  },
+  "jira_markdown": "# План изучения задачи\n\nЗадача DEMO-3 требует исправить обработчик события ShipmentDelivered в order-service. Текущая реализация записывает время доставки (delivered_at), но не меняет статус заказа с shipped на delivered. Необходимо обеспечить атомарное изменение статуса и времени, корректную обработку повторных событий и отменённых заказов (no-op), а также маршрутизацию неизвестных заказов в dead-letter queue.\n\n- [fact/entry_point] Событие ShipmentDelivered публикуется сервисом delivery-service после подтверждения доставки.\n\n  Источник: fixtures/delivery-service/internal/handlers/delivered.go:4-10\n  func MarkDelivered(shipment Shipment, bus Bus) error {\n    return bus.Publish(\"ShipmentDelivered\", ShipmentDelivered{\n        ShipmentID: shipment.ID,\n        OrderID: shipment.OrderID,\n        DeliveredAt: shipment.DeliveredAt,\n    })\n}\n\n  Источник: fixtures/contracts/shipment_delivered.json:2-4\n  \"event\": \"ShipmentDelivered\",\n  \"producer\": \"delivery-service\",\n  \"consumer\": \"order-service\",\n\n- [fact/change_candidate] Текущий обработчик OnShipmentDelivered в order-service вызывает только SetDeliveredAt, что является причиной дефекта: статус остаётся 'shipped'.\n\n  Источник: fixtures/order-service/internal/consumers/shipment_delivered.go:4-7\n  func OnShipmentDelivered(event ShipmentDelivered, orders Store) error {\n    // Current defect: records time but leaves status as shipped.\n    return orders.SetDeliveredAt(event.OrderID, event.DeliveredAt)\n}\n\n  Источник: fixtures/docs/delivery_decision.md:4-5\n  Текущее поведение OnShipmentDelivered: записывает delivered_at, но не меняет статус.\nТребование: перевести заказ shipped → delivered и сохранить delivered_at атомарно.\n\n- [fact/context] Контракт события определяет поля shipment_id, order_id и delivered_at, а также гарантию доставки at-least-once, что требует идемпотентности обработки.\n\n  Источник: fixtures/contracts/shipment_delivered.json:5-10\n  \"fields\": {\n    \"shipment_id\": \"string\",\n    \"order_id\": \"string\",\n    \"delivered_at\": \"RFC3339 timestamp\"\n  },\n  \"delivery\": \"at-least-once\"\n\n- [fact/relationship] Связь между сервисами подтверждается контрактом: producer — delivery-service, consumer — order-service.\n\n  Источник: fixtures/contracts/shipment_delivered.json:3-4\n  \"producer\": \"delivery-service\",\n  \"consumer\": \"order-service\",\n\n## Следующие шаги\n\n- [ ] Изучить интерфейс Store в order-service, чтобы найти или создать метод для атомарного обновления статуса и времени доставки.\n  Результат: Понимание того, как реализовать транзакционное обновление полей status и delivered_at.\n\n- [ ] Модифицировать OnShipmentDelivered так, чтобы он проверял текущий статус заказа перед обновлением.\n  Результат: Логика, которая пропускает обновление, если статус уже 'delivered' или 'cancelled'.\n\n- [ ] Реализовать обработку случая, когда order_id не найден в базе данных.\n  Результат: Отправка сообщения в dead-letter queue вместо создания нового заказа или ошибки.\n\n- [ ] Написать тесты для проверки идемпотентности (повторная доставка) и корректной реакции на отменённые заказы.\n  Результат: Тесты проходят, подтверждая отсутствие изменений при повторных событиях и для cancelled заказов.\n\n## Вопросы наставнику\n\n## Ограничения\n\n- Не предоставлен код интерфейса Store, поэтому конкретные методы для атомарного обновления неизвестны.\n\n- Не указано, какой механизм используется для dead-letter queue (например, RabbitMQ DLQ или Kafka topic)."
+}

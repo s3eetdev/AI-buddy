@@ -1,0 +1,6 @@
+{
+  "event": "StockAdjusted",
+  "producer": "inventory-service",
+  "consumer": "search-service",
+  "fields": {"product_id": "string", "count": "integer"}
+}

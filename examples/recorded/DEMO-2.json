@@ -1,0 +1,211 @@
+{
+  "task_id": "DEMO-2",
+  "status": "needs_clarification",
+  "plan": {
+    "summary": "Задача DEMO-2 требует улучшения обработки события OrderCancelled, однако конкретные бизнес-требования (канал уведомления, причины отмены, получатель) не согласованы. Текущая реализация в notification-service отправляет email только при причине 'payment_expired', игнорируя другие причины, включая 'seller_cancelled'. Требования предыдущей задачи DEMO-1 (отправка email при seller_cancelled) явно не распространяются на эту задачу. План состоит в анализе текущего потока данных и формулировании вопросов для уточнения недостающих решений.",
+    "findings": [
+      {
+        "kind": "fact",
+        "role": "entry_point",
+        "explanation": "Событие OrderCancelled публикуется сервисом order-service после отмены заказа.",
+        "citations": [
+          {
+            "source_id": "architecture",
+            "start_line": 2,
+            "end_line": 2,
+            "quote": "order-service publishes OrderCancelled after cancellation."
+          },
+          {
+            "source_id": "cancel-handler",
+            "start_line": 4,
+            "end_line": 4,
+            "quote": "return bus.Publish(\"OrderCancelled\", OrderCancelled{OrderID: order.ID, BuyerID: order.BuyerID, Reason: \"seller_cancelled\"})"
+          }
+        ]
+      },
+      {
+        "kind": "fact",
+        "role": "relationship",
+        "explanation": "Сервис notification-service подписан на событие OrderCancelled. Контракт включает поля order_id, buyer_id и reason.",
+        "citations": [
+          {
+            "source_id": "cancel-contract",
+            "start_line": 3,
+            "end_line": 9,
+            "quote": "\"producer\": \"order-service\",\n  \"consumer\": \"notification-service\",\n  \"fields\": {\n    \"order_id\": \"string\",\n    \"buyer_id\": \"string\",\n    \"reason\": \"string\"\n  },"
+          },
+          {
+            "source_id": "notification-consumer",
+            "start_line": 2,
+            "end_line": 2,
+            "quote": "// Subscribed to OrderCancelled."
+          }
+        ]
+      },
+      {
+        "kind": "fact",
+        "role": "context",
+        "explanation": "Текущая логика потребителя отправляет email покупателю только если причина отмены равна 'payment_expired'. Для других причин (включая 'seller_cancelled') уведомление не отправляется.",
+        "citations": [
+          {
+            "source_id": "notification-consumer",
+            "start_line": 4,
+            "end_line": 5,
+            "quote": "if event.Reason != \"payment_expired\" { return nil }\n    return mail.Send(event.BuyerID, \"order_cancelled\", event.OrderID)"
+          },
+          {
+            "source_id": "architecture",
+            "start_line": 4,
+            "end_line": 4,
+            "quote": "Seller cancellation currently does not send email."
+          }
+        ]
+      },
+      {
+        "kind": "fact",
+        "role": "context",
+        "explanation": "Требования задачи DEMO-1 (отправка email при seller_cancelled) не применимы к текущей задаче DEMO-2. Общие правила новой отмены не заданы.",
+        "citations": [
+          {
+            "source_id": "task:DEMO-2",
+            "start_line": 3,
+            "end_line": 3,
+            "quote": "Требования DEMO-1 не распространяются на эту задачу."
+          },
+          {
+            "source_id": "architecture",
+            "start_line": 7,
+            "end_line": 7,
+            "quote": "Общие правила новой отмены не заданы: используйте критерии конкретной задачи."
+          }
+        ]
+      },
+      {
+        "kind": "fact",
+        "role": "context",
+        "explanation": "Доставка событий осуществляется по принципу at-least-once, но дедупликация на стороне потребителя в текущих фикстурах не реализована.",
+        "citations": [
+          {
+            "source_id": "cancel-contract",
+            "start_line": 10,
+            "end_line": 10,
+            "quote": "\"delivery\": \"at-least-once\""
+          },
+          {
+            "source_id": "architecture",
+            "start_line": 6,
+            "end_line": 6,
+            "quote": "Delivery is at-least-once; consumer deduplication is not implemented in this fixture."
+          }
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "action": "Проанализировать текущий код обработчика OnOrderCancelled в notification-service, чтобы подтвердить отсутствие логики для других причин отмены.",
+        "source_ids": [
+          "notification-consumer"
+        ],
+        "expected_result": "Подтверждено, что метод возвращает nil для всех причин, кроме 'payment_expired'."
+      },
+      {
+        "action": "Изучить контракт OrderCancelled и архитектуру взаимодействия, чтобы определить доступные данные (buyer_id, reason) для будущих решений о маршрутизации уведомлений.",
+        "source_ids": [
+          "cancel-contract",
+          "architecture"
+        ],
+        "expected_result": "Понятно, какие поля доступны для принятия решения о канале и получателе."
+      },
+      {
+        "action": "Сформулировать список открытых вопросов для стейкхолдеров относительно недостающих бизнес-решений (канал, причины, получатель), опираясь на описание задачи DEMO-2.",
+        "source_ids": [
+          "task:DEMO-2"
+        ],
+        "expected_result": "Список конкретных вопросов для уточнения требований."
+      }
+    ],
+    "questions": [
+      "Какие именно причины отмены (кроме payment_expired) должны вызывать отправку уведомлений?",
+      "Через какой канал (email, push, SMS) должны доставляться новые типы уведомлений?",
+      "Кто является получателем уведомления при разных сценариях отмены (покупатель, продавец или оба)?",
+      "Требуется ли реализация дедупликации сообщений на стороне notification-service, учитывая доставку at-least-once?"
+    ],
+    "limitations": [
+      "Бизнес-требования для новых сценариев уведомлений полностью отсутствуют в источниках.",
+      "Исторические требования DEMO-1 и DEMO-0 не могут быть использованы как основа для реализации DEMO-2.",
+      "Нет информации о существующих шаблонах уведомлений для других каналов, кроме email."
+    ]
+  },
+  "sources": [
+    {
+      "id": "cancel-decision",
+      "scope": "demo",
+      "path": "fixtures/docs/cancellation_decision.md",
+      "kind": "documentation",
+      "content": "# DEMO-1: согласованное изменение отмены заказа\nСинтетическое решение команды, не регламент Авито.\nОбласть действия: только DEMO-1. Для других задач каналы нужно уточнять.\nПри OrderCancelled с reason=seller_cancelled отправлять покупателю email.\nИспользовать существующий шаблон order_cancelled и поле buyer_id.\nСохранить текущее уведомление payment_expired без изменения.\nОстальные причины не должны отправлять уведомления.\nПовторная доставка одного order_id + reason не должна отправлять второе письмо.\nЗащита от повторов должна быть в notification-service, а не в order-service.\nПодготовить план изменения и тестирования; код автоматически не изменять.\n"
+    },
+    {
+      "id": "architecture",
+      "scope": "demo",
+      "path": "fixtures/docs/architecture.md",
+      "kind": "documentation",
+      "content": "# Synthetic demo: cancellation / отмена заказа\norder-service publishes OrderCancelled after cancellation.\nnotification-service subscribes to OrderCancelled and sends email for payment_expired.\nSeller cancellation currently does not send email.\nBuyerID is present in the contract.\nDelivery is at-least-once; consumer deduplication is not implemented in this fixture.\nОбщие правила новой отмены не заданы: используйте критерии конкретной задачи.\nДля DEMO-1 согласованные требования находятся в cancellation_decision.md.\nThese fixtures are not Avito policies or production code.\n"
+    },
+    {
+      "id": "cancel-contract",
+      "scope": "demo",
+      "path": "fixtures/contracts/order_cancelled.json",
+      "kind": "contract",
+      "content": "{\n  \"event\": \"OrderCancelled\",\n  \"producer\": \"order-service\",\n  \"consumer\": \"notification-service\",\n  \"fields\": {\n    \"order_id\": \"string\",\n    \"buyer_id\": \"string\",\n    \"reason\": \"string\"\n  },\n  \"delivery\": \"at-least-once\"\n}"
+    },
+    {
+      "id": "cancel-handler",
+      "scope": "demo",
+      "path": "fixtures/order-service/internal/handlers/cancel_order.go",
+      "kind": "code",
+      "content": "package handlers\n// CancelOrder handles seller cancellation.\nfunc CancelOrder(order Order, bus Bus) error {\n    return bus.Publish(\"OrderCancelled\", OrderCancelled{OrderID: order.ID, BuyerID: order.BuyerID, Reason: \"seller_cancelled\"})\n}"
+    },
+    {
+      "id": "notification-consumer",
+      "scope": "demo",
+      "path": "fixtures/notification-service/internal/consumers/order_cancelled.go",
+      "kind": "code",
+      "content": "package consumers\n// Subscribed to OrderCancelled.\nfunc OnOrderCancelled(event OrderCancelled, mail Mailer) error {\n    if event.Reason != \"payment_expired\" { return nil }\n    return mail.Send(event.BuyerID, \"order_cancelled\", event.OrderID)\n}"
+    },
+    {
+      "id": "local-run",
+      "scope": "demo",
+      "path": "fixtures/docs/local_run.md",
+      "kind": "documentation",
+      "content": "# Локальный стенд синтетического маркетплейса\nЭто описание вымышленной системы для чтения AI, не команда запуска сервисов.\norder-service: создание и отмена заказа; команда orders.\ndelivery-service: статусы отправления; команда logistics.\nnotification-service: email-уведомления; команда messaging.\ninventory-service: остатки товаров; команда catalog.\nOrderCancelled связывает order-service и notification-service.\nShipmentDelivered связывает delivery-service и order-service.\nStockAdjusted относится к остаткам, а не к отмене заказа или доставке.\nGo-файлы в fixtures — учебные фрагменты, отдельные исполняемые микросервисы не поставляются.\n"
+    },
+    {
+      "id": "delivery-decision",
+      "scope": "demo",
+      "path": "fixtures/docs/delivery_decision.md",
+      "kind": "documentation",
+      "content": "# DEMO-3: статус заказа после доставки\nСинтетическая спецификация, не регламент Авито.\ndelivery-service публикует ShipmentDelivered, order-service принимает это событие.\nТекущее поведение OnShipmentDelivered: записывает delivered_at, но не меняет статус.\nТребование: перевести заказ shipped → delivered и сохранить delivered_at атомарно.\nЗаказ delivered при повторном событии не менять; событие подтвердить без ошибки.\nЗаказы cancelled игнорировать: поздняя доставка не должна отменять отмену заказа.\nСобытие для неизвестного order_id направлять в dead-letter, не создавать заказ.\nУведомления покупателю и изменение inventory-service в DEMO-3 не входят.\n"
+    },
+    {
+      "id": "previous-task",
+      "scope": "demo",
+      "path": "fixtures/docs/previous_task.md",
+      "kind": "documentation",
+      "content": "# Историческая задача DEMO-0: истечение срока оплаты\nСинтетическая история изменения, не требование для новых задач.\nДобавили обработку OrderCancelled reason=payment_expired в notification-service.\nИспользовали email и шаблон order_cancelled.\nТестировали только одну доставку; повторные события не проверяли.\nКаналы и условия новых уведомлений определяются новой задачей, а не этой историей.\n"
+    },
+    {
+      "id": "task:DEMO-2",
+      "scope": "demo",
+      "path": "input/task/DEMO-2",
+      "kind": "documentation",
+      "content": "Задача: DEMO-2\nИзменить уведомления при отмене заказа\nНужно улучшить обработку OrderCancelled. Канал, причины отмены и получатель ещё не согласованы. Требования DEMO-1 не распространяются на эту задачу. Объясни существующий путь и перечисли недостающие бизнес-решения.\nКритерии приёмки:\nУточнение пользователя:\n"
+    }
+  ],
+  "model": "qwen/qwen3.8-flash",
+  "usage": {
+    "prompt_tokens": 4467,
+    "completion_tokens": 1592,
+    "total_tokens": 6059
+  },
+  "jira_markdown": "# План изучения задачи\n\nЗадача DEMO-2 требует улучшения обработки события OrderCancelled, однако конкретные бизнес-требования (канал уведомления, причины отмены, получатель) не согласованы. Текущая реализация в notification-service отправляет email только при причине 'payment_expired', игнорируя другие причины, включая 'seller_cancelled'. Требования предыдущей задачи DEMO-1 (отправка email при seller_cancelled) явно не распространяются на эту задачу. План состоит в анализе текущего потока данных и формулировании вопросов для уточнения недостающих решений.\n\n- [fact/entry_point] Событие OrderCancelled публикуется сервисом order-service после отмены заказа.\n\n  Источник: fixtures/docs/architecture.md:2-2\n  order-service publishes OrderCancelled after cancellation.\n\n  Источник: fixtures/order-service/internal/handlers/cancel_order.go:4-4\n  return bus.Publish(\"OrderCancelled\", OrderCancelled{OrderID: order.ID, BuyerID: order.BuyerID, Reason: \"seller_cancelled\"})\n\n- [fact/relationship] Сервис notification-service подписан на событие OrderCancelled. Контракт включает поля order_id, buyer_id и reason.\n\n  Источник: fixtures/contracts/order_cancelled.json:3-9\n  \"producer\": \"order-service\",\n  \"consumer\": \"notification-service\",\n  \"fields\": {\n    \"order_id\": \"string\",\n    \"buyer_id\": \"string\",\n    \"reason\": \"string\"\n  },\n\n  Источник: fixtures/notification-service/internal/consumers/order_cancelled.go:2-2\n  // Subscribed to OrderCancelled.\n\n- [fact/context] Текущая логика потребителя отправляет email покупателю только если причина отмены равна 'payment_expired'. Для других причин (включая 'seller_cancelled') уведомление не отправляется.\n\n  Источник: fixtures/notification-service/internal/consumers/order_cancelled.go:4-5\n  if event.Reason != \"payment_expired\" { return nil }\n    return mail.Send(event.BuyerID, \"order_cancelled\", event.OrderID)\n\n  Источник: fixtures/docs/architecture.md:4-4\n  Seller cancellation currently does not send email.\n\n- [fact/context] Требования задачи DEMO-1 (отправка email при seller_cancelled) не применимы к текущей задаче DEMO-2. Общие правила новой отмены не заданы.\n\n  Источник: input/task/DEMO-2:3-3\n  Требования DEMO-1 не распространяются на эту задачу.\n\n  Источник: fixtures/docs/architecture.md:7-7\n  Общие правила новой отмены не заданы: используйте критерии конкретной задачи.\n\n- [fact/context] Доставка событий осуществляется по принципу at-least-once, но дедупликация на стороне потребителя в текущих фикстурах не реализована.\n\n  Источник: fixtures/contracts/order_cancelled.json:10-10\n  \"delivery\": \"at-least-once\"\n\n  Источник: fixtures/docs/architecture.md:6-6\n  Delivery is at-least-once; consumer deduplication is not implemented in this fixture.\n\n## Следующие шаги\n\n- [ ] Проанализировать текущий код обработчика OnOrderCancelled в notification-service, чтобы подтвердить отсутствие логики для других причин отмены.\n  Результат: Подтверждено, что метод возвращает nil для всех причин, кроме 'payment_expired'.\n\n- [ ] Изучить контракт OrderCancelled и архитектуру взаимодействия, чтобы определить доступные данные (buyer_id, reason) для будущих решений о маршрутизации уведомлений.\n  Результат: Понятно, какие поля доступны для принятия решения о канале и получателе.\n\n- [ ] Сформулировать список открытых вопросов для стейкхолдеров относительно недостающих бизнес-решений (канал, причины, получатель), опираясь на описание задачи DEMO-2.\n  Результат: Список конкретных вопросов для уточнения требований.\n\n## Вопросы наставнику\n\n- Какие именно причины отмены (кроме payment_expired) должны вызывать отправку уведомлений?\n\n- Через какой канал (email, push, SMS) должны доставляться новые типы уведомлений?\n\n- Кто является получателем уведомления при разных сценариях отмены (покупатель, продавец или оба)?\n\n- Требуется ли реализация дедупликации сообщений на стороне notification-service, учитывая доставку at-least-once?\n\n## Ограничения\n\n- Бизнес-требования для новых сценариев уведомлений полностью отсутствуют в источниках.\n\n- Исторические требования DEMO-1 и DEMO-0 не могут быть использованы как основа для реализации DEMO-2.\n\n- Нет информации о существующих шаблонах уведомлений для других каналов, кроме email."
+}

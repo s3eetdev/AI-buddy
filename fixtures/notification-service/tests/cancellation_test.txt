@@ -1,0 +1,3 @@
+Scenario: OrderCancelled reason=payment_expired sends one email.
+Scenario: OrderCancelled reason=seller_cancelled sends no email.
+Missing coverage: repeated event delivery.

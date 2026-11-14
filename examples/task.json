@@ -1,0 +1,14 @@
+{
+  "task_id": "DEMO-1",
+  "title": "Уведомить покупателя об отмене заказа продавцом",
+  "description": "Разобрать путь отмены seller_cancelled от order-service до notification-service через OrderCancelled. Составить план изменения без написания кода. Согласованные решения для DEMO-1 находятся в cancellation_decision.md.",
+  "acceptance_criteria": [
+    "Email через существующий шаблон order_cancelled покупателю из buyer_id.",
+    "Сохранить payment_expired; прочие причины игнорировать.",
+    "Повтор order_id + reason не должен отправлять второе письмо; дедупликация в notification-service."
+  ],
+  "allowed_scopes": [
+    "demo"
+  ],
+  "question": ""
+}
