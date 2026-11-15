@@ -1,0 +1,402 @@
+openapi: 3.0.3
+info:
+  title: AI-buddy Task Navigator Backend
+  version: 1.0.0
+  description: |
+    Demo-only Go backend. Profiles are selected by server configuration, not by the client.
+    Replay results are recordings, not new model calls. Python's separate contract is in openapi.json.
+servers:
+  - url: http://127.0.0.1:8080
+paths:
+  /health:
+    get:
+      summary: Process liveness
+      responses:
+        '200': {description: Alive}
+  /ready:
+    get:
+      summary: Database, schema, and configuration readiness
+      responses:
+        '200': {description: Ready}
+        '503': {$ref: '#/components/responses/Error'}
+  /api/v1/me:
+    get:
+      summary: Current configured demo profile
+      responses:
+        '200':
+          description: Demo identity
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profile:
+                    type: object
+                    required: [id, display_name, allowed_scopes]
+                    properties:
+                      id: {type: string, example: intern}
+                      display_name: {type: string}
+                      allowed_scopes: {type: array, items: {type: string}}
+                  auth_mode: {type: string, enum: [demo]}
+  /api/v1/demo/issues:
+    get:
+      summary: List synthetic Jira issues and their launch URLs
+      responses:
+        '200':
+          description: Demo issues
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  issues:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        task_id: {type: string, example: DEMO-1}
+                        title: {type: string}
+                        jira_url: {type: string, format: uri, example: 'https://demo-jira.local/browse/DEMO-1'}
+  /api/v1/analyses:
+    post:
+      summary: Atomically queue an analysis
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [jira_url]
+              properties:
+                jira_url: {type: string, format: uri, example: 'https://demo-jira.local/browse/DEMO-1'}
+      responses:
+        '202': {$ref: '#/components/responses/Queued'}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+    get:
+      summary: List analyses owned by the current profile
+      parameters:
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+        - name: offset
+          in: query
+          schema: {type: integer, minimum: 0, default: 0}
+      responses:
+        '200':
+          description: History page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  analyses:
+                    type: array
+                    items: {$ref: '#/components/schemas/Analysis'}
+        '400': {$ref: '#/components/responses/Error'}
+  /api/v1/analyses/{id}:
+    parameters:
+      - $ref: '#/components/parameters/AnalysisId'
+    get:
+      summary: Read an analysis and a selected immutable result revision
+      parameters:
+        - $ref: '#/components/parameters/Revision'
+      responses:
+        '200':
+          description: Analysis; failed background work is represented by status and error
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Analysis'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+  /api/v1/analyses/{id}/answers:
+    parameters:
+      - $ref: '#/components/parameters/AnalysisId'
+    post:
+      summary: Answer a clarification and atomically queue a new attempt
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [answer]
+              properties:
+                answer: {type: string, minLength: 1, maxLength: 2000}
+      responses:
+        '202': {$ref: '#/components/responses/Queued'}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+  /api/v1/analyses/{id}/steps/{step_id}:
+    parameters:
+      - $ref: '#/components/parameters/AnalysisId'
+      - name: step_id
+        in: path
+        required: true
+        schema: {type: string, example: v1-s1}
+    patch:
+      summary: Update progress for a step in the current revision
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [result_revision, completed]
+              properties:
+                result_revision: {type: integer, minimum: 1, example: 1}
+                completed: {type: boolean}
+      responses:
+        '200':
+          description: Updated progress
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StepProgress'}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+  /api/v1/analyses/{id}/sources/{source_id}:
+    parameters:
+      - $ref: '#/components/parameters/AnalysisId'
+      - name: source_id
+        in: path
+        required: true
+        description: URL-encoded source ID; this is a lookup key, never a filesystem path.
+        schema: {type: string}
+    get:
+      summary: Read the saved source snapshot
+      parameters:
+        - $ref: '#/components/parameters/Revision'
+      responses:
+        '200':
+          description: Source snapshot
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Source'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+  /api/v1/analyses/{id}/publish:
+    parameters:
+      - $ref: '#/components/parameters/AnalysisId'
+    post:
+      summary: Confirm publication of the current ready revision in mock Jira
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [result_revision, confirmed]
+              properties:
+                result_revision: {type: integer, minimum: 1, example: 1}
+                confirmed: {type: boolean, enum: [true]}
+      responses:
+        '200':
+          description: Publication receipt; repeated requests return the same plan
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [plan_id, url]
+                properties:
+                  plan_id: {type: string}
+                  url: {type: string, example: /api/v1/mock-jira/plans/example}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+  /api/v1/mock-jira/plans/{plan_id}:
+    get:
+      summary: Read a published mock Jira plan
+      parameters:
+        - name: plan_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Stored plan and metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plan_id: {type: string}
+                  task_id: {type: string}
+                  analysis_id: {type: string, format: uuid}
+                  result_revision: {type: integer}
+                  jira_markdown: {type: string}
+                  result: {$ref: '#/components/schemas/AnalyzeResponse'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+components:
+  parameters:
+    AnalysisId:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: A key identifying this operation. Reuse with different input returns 409.
+      schema: {type: string, minLength: 1, example: create-demo-1}
+    Revision:
+      name: result_revision
+      in: query
+      required: false
+      description: Immutable result revision; defaults to current revision.
+      schema: {type: integer, minimum: 1}
+  responses:
+    Error:
+      description: Safe error; details never include provider traces or secrets
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          example: {error: {code: invalid_request, message: Invalid request, request_id: example-request-id}}
+    Queued:
+      description: |
+        Work accepted without waiting for the AI service. A new operation is
+        queued; an idempotent replay returns the analysis's current status.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [analysis_id, status, status_url]
+            properties:
+              analysis_id: {type: string, format: uuid}
+              status: {type: string, enum: [queued, collecting_context, ready, needs_clarification, insufficient_context, failed]}
+              status_url: {type: string, example: /api/v1/analyses/00000000-0000-0000-0000-000000000001}
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+    Analysis:
+      type: object
+      required: [analysis_id, task_id, status, execution_mode, result_revision, result, step_progress, publication, error]
+      properties:
+        analysis_id: {type: string, format: uuid}
+        task_id: {type: string}
+        status: {type: string, enum: [queued, collecting_context, ready, needs_clarification, insufficient_context, failed]}
+        execution_mode: {type: string, enum: [live, replay]}
+        result_revision: {type: integer, nullable: true}
+        result:
+          nullable: true
+          allOf: [{$ref: '#/components/schemas/AnalyzeResponse'}]
+        step_progress:
+          type: array
+          items: {$ref: '#/components/schemas/StepProgress'}
+        publication: {$ref: '#/components/schemas/Publication'}
+        error:
+          type: object
+          nullable: true
+          properties:
+            code: {type: string}
+            message: {type: string}
+    StepProgress:
+      type: object
+      required: [step_id, completed]
+      properties:
+        step_id: {type: string, example: v1-s1}
+        completed: {type: boolean}
+        result_revision: {type: integer}
+    Publication:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [not_published, publishing, published, publish_failed]}
+        plan_id: {type: string}
+        url: {type: string, example: /api/v1/mock-jira/plans/example}
+        error:
+          type: object
+          nullable: true
+          properties:
+            code: {type: string}
+            message: {type: string}
+    AnalyzeResponse:
+      type: object
+      required: [task_id, status, plan, sources, model, usage, jira_markdown]
+      properties:
+        task_id: {type: string}
+        status: {type: string, enum: [ready, needs_clarification, insufficient_context]}
+        plan:
+          type: object
+          required: [summary, findings, steps, questions, limitations]
+          properties:
+            summary: {type: string}
+            findings:
+              type: array
+              items: {$ref: '#/components/schemas/Finding'}
+            steps:
+              type: array
+              items: {$ref: '#/components/schemas/Step'}
+            questions: {type: array, items: {type: string}}
+            limitations: {type: array, items: {type: string}}
+        sources:
+          type: array
+          items: {$ref: '#/components/schemas/Source'}
+        model: {type: string, nullable: true}
+        usage: {type: object, additionalProperties: {type: integer}}
+        jira_markdown: {type: string}
+    Finding:
+      type: object
+      required: [kind, role, explanation, citations]
+      properties:
+        kind: {type: string, enum: [fact, hypothesis]}
+        role: {type: string, enum: [entry_point, change_candidate, context, relationship]}
+        explanation: {type: string}
+        citations:
+          type: array
+          items:
+            type: object
+            required: [source_id, start_line, end_line, quote]
+            properties:
+              source_id: {type: string}
+              start_line: {type: integer, minimum: 1}
+              end_line: {type: integer, minimum: 1}
+              quote: {type: string}
+    Step:
+      type: object
+      required: [action, source_ids, expected_result]
+      properties:
+        action: {type: string}
+        source_ids: {type: array, items: {type: string}}
+        expected_result: {type: string}
+    Source:
+      type: object
+      required: [id, scope, path, kind, content]
+      properties:
+        id: {type: string}
+        scope: {type: string}
+        path: {type: string}
+        kind: {type: string}
+        content: {type: string}
