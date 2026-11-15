@@ -1,0 +1,36 @@
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.user-profile__avatar {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #eee8f9;
+  color: #7157a9;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.user-profile__details {
+  min-width: 0;
+  max-width: 320px;
+  overflow-wrap: anywhere;
+}
+
+.user-profile__name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.user-profile__team {
+  margin-top: 2px;
+  color: #6c7888;
+  font-size: 12px;
+}

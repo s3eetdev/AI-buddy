@@ -1,5 +1,16 @@
 # AI-buddy Task Navigator — Python AI-сервис
 
+Интерфейс React + TypeScript расположен в [frontend/](frontend/README.md).
+Для запуска из корня репозитория:
+
+```sh
+cd frontend
+npm ci
+npm run dev
+```
+
+Интерфейс обращается к Go API. В режиме разработки Vite перенаправляет `/api` на `http://127.0.0.1:8080`; бэкенд нужно запустить отдельно по инструкции ниже.
+
 > Go API, PostgreSQL и worker, включая офлайн replay и подтверждаемую mock Jira,
 > описаны в [backend/README.md](backend/README.md). Для запуска полного демо из
 > корня используйте `docker compose up --build -d` (файл `.env` не обязателен).

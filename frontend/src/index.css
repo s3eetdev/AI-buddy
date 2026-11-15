@@ -1,0 +1,109 @@
+@font-face {
+  font-family: 'CoFo Avito Text';
+  src: url('./assets/fonts/cofo-avito-text-regular.woff') format('woff');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'CoFo Avito Display';
+  src: url('./assets/fonts/cofo-avito-display-regular.woff') format('woff');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'CoFo Avito Display';
+  src: url('./assets/fonts/cofo-avito-display-bold.woff') format('woff');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  --color-background: #f4f4f4;
+  --color-surface: #ffffff;
+  --color-text: #000;
+  --color-muted: #000;
+  --color-border: #e5e5e5;
+  --color-accent: #000;
+  --color-card-green: #d4fec5;
+  --color-card-green-hover: #e1ffd7;
+  --color-card-green-selected: #b6e99e;
+  --color-card-green-selected-hover: #c7f2b5;
+
+  --font-text: 'CoFo Avito Text', Arial, sans-serif;
+  --font-heading: 'CoFo Avito Display', Arial, sans-serif;
+
+  font-family: var(--font-text);
+  font-size: 16px;
+  line-height: 1.5;
+  font-synthesis: none;
+  color-scheme: light;
+  color: var(--color-text);
+  background: var(--color-background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  outline-offset: 4px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid #000;
+  outline-offset: 3px;
+}
+
+p {
+  margin: 0;
+}
+
+.workspace-retry,
+.source-link {
+  display: inline-block;
+  padding: 7px 12px;
+  border: 1px solid #000;
+  border-radius: 0;
+  color: #000;
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.workspace-retry { margin-top: 10px; }
+.workspace-retry:hover,
+.source-link:hover { background: #f4f4f4; }
