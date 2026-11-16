@@ -31,6 +31,8 @@ export interface TaskContext {
 export interface ChatMessage {
   id: string
   role: 'assistant' | 'user'
+  analysisId: string
+  revision: number
   text: string
   findings?: Finding[]
   limitations?: string[]

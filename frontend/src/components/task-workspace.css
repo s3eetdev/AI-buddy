@@ -123,6 +123,11 @@
   line-height: 1.3;
   letter-spacing: -0.4px;
 }
+.task-card__mode {
+  margin: 8px 0 0;
+  color: var(--color-muted);
+  font-size: 12px;
+}
 
 .workspace-tabs {
   display: flex;

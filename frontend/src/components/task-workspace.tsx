@@ -17,20 +17,36 @@ const tabs: { id: WorkspaceTab; title: string }[] = [
 type Operation = 'analyze' | 'answer' | 'step' | 'publish'
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
+function setAnalysisUrl(id: string | null) {
+  const url = new URL(window.location.href)
+  if (id) url.searchParams.set('analysis_id', id)
+  else url.searchParams.delete('analysis_id')
+  window.history.replaceState(window.history.state, '', url)
+}
+
+function recoveryError(error: unknown): unknown {
+  if (error instanceof ApiError && error.status === 404) return new Error('Анализ не найден. Проверьте ссылку или начните новую задачу.')
+  if (error instanceof ApiError && (error.status === 401 || error.status === 403)) return new Error('Нет доступа к этому анализу.')
+  return error
+}
+
 export function TaskWorkspace() {
+  const [initialAnalysisId] = useState(() => new URL(window.location.href).searchParams.get('analysis_id'))
   const [taskInput, setTaskInput] = useState('')
   const [inputError, setInputError] = useState('')
   const [issues, setIssues] = useState<Issue[]>([])
   const [catalogError, setCatalogError] = useState('')
   const [catalogAttempt, setCatalogAttempt] = useState(0)
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
-  const [analysisId, setAnalysisId] = useState<string | null>(null)
+  const [analysisId, setAnalysisId] = useState<string | null>(initialAnalysisId)
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('buddy')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
-  const [operation, setOperation] = useState<Operation | null>(null)
+  const [operation, setOperation] = useState<Operation | null>(initialAnalysisId ? 'analyze' : null)
   const [loadingStatus, setLoadingStatus] = useState<AnalysisStatus>('queued')
-  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null)
+  const [selectedSource, setSelectedSource] = useState<{ id: string; analysisId: string; revision: number } | null>(null)
+  const [terminalFailed, setTerminalFailed] = useState(false)
+  const createKeyName = useRef<string | null>(null)
   const requestController = useRef<AbortController | null>(null)
   // Повтор запроса с тем же ключом не создаёт вторую операцию на сервере.
   const requestKeys = useRef<Record<string, string>>({})
@@ -86,24 +102,68 @@ export function TaskWorkspace() {
 
   function showResult(result: Analysis, keepHistory: boolean) {
     if (result.status === 'failed') {
+      setTerminalFailed(true)
+      if (createKeyName.current) delete requestKeys.current[createKeyName.current]
       throw new ApiError(result.error?.message || 'Не удалось разобрать задачу.', result.error?.code || 'analysis_failed', 500)
     }
     if (!result.result || result.result_revision === null) {
       throw new Error('Сервер не вернул план. Попробуйте обновить результат.')
     }
     const message = messageForScreen(result)
+    setTerminalFailed(false)
     setAnalysis(result)
     setSaveStatus(result.publication.status === 'published' ? 'saved' : 'idle')
-    setSelectedSourceId(null)
+    setSelectedSource(null)
     setMessages((previous) => {
       if (!keepHistory) return [message]
       return [...previous.filter((item) => item.id !== message.id), message]
     })
   }
 
+  // URL содержит только идентификатор; восстановление читает существующий анализ.
+  useEffect(() => {
+    const id = initialAnalysisId
+    if (!id) return
+    const controller = new AbortController()
+    requestController.current = controller
+    void waitForAnalysis(id, controller.signal, setLoadingStatus)
+      .then((result) => {
+        if (controller.signal.aborted) return
+        setTaskInput(result.task_id)
+        showResult(result, false)
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setInputError(errorMessage(recoveryError(error)))
+      })
+      .finally(() => {
+        if (requestController.current === controller) requestController.current = null
+        if (!controller.signal.aborted) setOperation(null)
+      })
+    return () => {
+      controller.abort()
+      if (requestController.current === controller) requestController.current = null
+    }
+  }, [initialAnalysisId])
+
   function handleTaskInputChange(event: ChangeEvent<HTMLInputElement>) {
     setTaskInput(event.target.value)
     setInputError('')
+  }
+
+  function startNewTask() {
+    requestController.current?.abort()
+    requestController.current = null
+    setOperation(null)
+    setAnalysisUrl(null)
+    setAnalysisId(null)
+    setAnalysis(null)
+    setTerminalFailed(false)
+    setTaskInput('')
+    setInputError('')
+    setMessages([])
+    setSaveStatus('idle')
+    setSelectedSource(null)
+    setActiveTab('buddy')
   }
 
   function handleTaskSubmit(event: FormEvent<HTMLFormElement>) {
@@ -128,14 +188,18 @@ export function TaskWorkspace() {
     await runRequest('analyze', async (signal) => {
       setAnalysis(null)
       setAnalysisId(null)
+      setAnalysisUrl(null)
+      setTerminalFailed(false)
       setMessages([])
       setSaveStatus('idle')
-      setSelectedSourceId(null)
+      setSelectedSource(null)
       setActiveTab('buddy')
       setLoadingStatus('queued')
       const keyName = 'create:' + jiraUrl
+      createKeyName.current = keyName
       const queued = await createAnalysis(jiraUrl, operationKey(keyName), signal)
       setAnalysisId(queued.analysis_id)
+      setAnalysisUrl(queued.analysis_id)
       const result = await waitForAnalysis(queued.analysis_id, signal, setLoadingStatus)
       showResult(result, false)
       delete requestKeys.current[keyName]
@@ -146,19 +210,24 @@ export function TaskWorkspace() {
   async function refreshResult() {
     if (!analysisId) return
     await runRequest('analyze', async (signal) => {
-      const result = await waitForAnalysis(analysisId, signal, setLoadingStatus)
-      showResult(result, true)
+      try {
+        const result = await waitForAnalysis(analysisId, signal, setLoadingStatus)
+        setTaskInput(result.task_id)
+        showResult(result, true)
+      } catch (error) {
+        throw recoveryError(error)
+      }
     })
   }
 
   // 2. Ответ передаётся серверу; новый план появляется только из его ответа.
   async function answerClarification(answer: string) {
-    if (!analysis || !task || task.status !== 'needs_clarification') return false
+    if (!analysis || analysis.result_revision === null || !task || task.status !== 'needs_clarification') return false
     const text = answer.trim().slice(0, 2000)
     if (!text) return false
     return runRequest('answer', async (signal) => {
       await sendAnswer(analysis.analysis_id, text, operationKey(`answer:${analysis.analysis_id}:${analysis.result_revision}:${text}`), signal)
-      setMessages((previous) => [...previous, { id: crypto.randomUUID(), role: 'user', text }])
+      setMessages((previous) => [...previous, { id: crypto.randomUUID(), role: 'user', analysisId: analysis.analysis_id, revision: analysis.result_revision!, text }])
       const result = await waitForAnalysis(analysis.analysis_id, signal, setLoadingStatus)
       showResult(result, true)
     })
@@ -190,8 +259,9 @@ export function TaskWorkspace() {
     })
   }
 
-  function openSource(sourceId: string) {
-    setSelectedSourceId(sourceId)
+  function openSource(sourceId: string, analysisId = analysis?.analysis_id, revision = analysis?.result_revision) {
+    if (!analysisId || revision == null) return
+    setSelectedSource({ id: sourceId, analysisId, revision })
     setActiveTab('materials')
     tabButtons.current[2]?.focus()
   }
@@ -250,14 +320,18 @@ export function TaskWorkspace() {
           placeholder="Ссылка или номер задачи"
           autoComplete="off"
           list="server-issues"
-          disabled={isBusy}
+          disabled={isBusy || Boolean(analysisId && !terminalFailed)}
           aria-invalid={Boolean(inputError)}
           aria-describedby={inputError ? 'task-input-error' : undefined}
         />
-        <button className="task-entry__button" type="submit" disabled={isBusy}>
-          {isAnalyzing ? 'Разбираю…' : 'Разобрать задачу'}
+        <button className="task-entry__button" type="submit" disabled={isBusy || Boolean(analysisId && !terminalFailed)}>
+          {isAnalyzing ? 'Разбираю…' : terminalFailed ? 'Запустить новый разбор' : 'Разобрать задачу'}
         </button>
       </form>
+
+      {analysisId && (
+        <button className="workspace-retry" type="button" onClick={startNewTask}>Новая задача</button>
+      )}
 
       <datalist id="server-issues">
         {issues.map((issue) => <option key={issue.task_id} value={issue.task_id}>{issue.title}</option>)}
@@ -309,8 +383,10 @@ export function TaskWorkspace() {
             <div className="task-card__meta">
               <span className="task-card__key">{task.key}</span>
               <span className={statusClass}>{statusText}</span>
+              <span>{analysis.execution_mode === 'replay' ? 'Записанный пример' : 'Live-анализ'}</span>
             </div>
             <h2 id="task-title">{task.title}</h2>
+            {analysis.execution_mode === 'replay' && <p className="task-card__mode">Используется ранее записанный ответ.</p>}
           </header>
 
           <div className="workspace-tabs" role="tablist" aria-label="Разделы задачи">
@@ -384,8 +460,8 @@ export function TaskWorkspace() {
               sources={task.sources}
               analysisId={analysis.analysis_id}
               revision={analysis.result_revision}
-              selectedId={selectedSourceId}
-              onSelect={setSelectedSourceId}
+              selected={selectedSource}
+              onSelect={(id) => openSource(id)}
             />
           </div>
         </section>
