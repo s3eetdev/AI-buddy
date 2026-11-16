@@ -8,7 +8,7 @@ interface TaskMaterialsProps {
   sources: TaskSource[]
   analysisId: string
   revision: number
-  selectedId: string | null
+  selected: { id: string; analysisId: string; revision: number } | null
   onSelect: (id: string) => void
 }
 const groups: { kind: TaskSource['kind']; title: string; caption: string }[] = [
@@ -42,7 +42,7 @@ function SourcePreview({ analysisId, revision, sourceId, onRetry }: {
   )
 }
 
-export function TaskMaterials({ sources, analysisId, revision, selectedId, onSelect }: TaskMaterialsProps) {
+export function TaskMaterials({ sources, analysisId, revision, selected, onSelect }: TaskMaterialsProps) {
   const [attempt, setAttempt] = useState(0)
   const previewId = useId()
 
@@ -66,9 +66,9 @@ export function TaskMaterials({ sources, analysisId, revision, selectedId, onSel
                   {items.map((source) => (
                     <li key={source.id}>
                       <button
-                        className={'task-materials__source' + (source.id === selectedId ? ' task-materials__source--selected' : '')}
+                        className={'task-materials__source' + (source.id === selected?.id && analysisId === selected.analysisId && revision === selected.revision ? ' task-materials__source--selected' : '')}
                         type="button"
-                        aria-pressed={source.id === selectedId}
+                        aria-pressed={source.id === selected?.id && analysisId === selected.analysisId && revision === selected.revision}
                         aria-controls={previewId}
                         onClick={() => onSelect(source.id)}
                       >
@@ -88,16 +88,17 @@ export function TaskMaterials({ sources, analysisId, revision, selectedId, onSel
           })}
         </div>
         <div className="task-materials__preview" id={previewId}>
-          {selectedId && (
+          {selected && selected.revision !== revision && <p>Источник из версии результата {selected.revision}.</p>}
+          {selected && (
             <SourcePreview
-              key={`${analysisId}:${revision}:${selectedId}:${attempt}`}
-              analysisId={analysisId}
-              revision={revision}
-              sourceId={selectedId}
+              key={`${selected.analysisId}:${selected.revision}:${selected.id}:${attempt}`}
+              analysisId={selected.analysisId}
+              revision={selected.revision}
+              sourceId={selected.id}
               onRetry={() => setAttempt(attempt + 1)}
             />
           )}
-          {!selectedId && (
+          {!selected && (
             <div className="task-materials__preview-empty">
               <span className="task-materials__empty-icon" aria-hidden="true">≡</span>
               <h3>Посмотрите материал</h3>

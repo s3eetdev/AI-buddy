@@ -8,7 +8,7 @@ type BuddyChatProps = {
   messages: ChatMessage[]
   isSubmitting: boolean
   onAnswer: (answer: string) => Promise<boolean>
-  onOpenSource: (id: string) => void
+  onOpenSource: (id: string, analysisId: string, revision: number) => void
 }
 
 const MAX_ANSWER_LENGTH = 2000
@@ -77,7 +77,7 @@ export function BuddyChat({ task, messages, isSubmitting, onAnswer, onOpenSource
                       <p>{finding.explanation}</p>
                       {finding.citations.map((citation, citationIndex) => (
                         <div className="buddy-chat__citation" key={citationIndex}>
-                          <button className="source-link" type="button" onClick={() => onOpenSource(citation.source_id)}>
+                          <button className="source-link" type="button" onClick={() => onOpenSource(citation.source_id, message.analysisId, message.revision)}>
                             {citation.source_id} · строки {citation.start_line}–{citation.end_line}
                           </button>
                           <blockquote>{citation.quote}</blockquote>

@@ -4,6 +4,7 @@ import { cleanup } from '@testing-library/react'
 
 afterEach(() => {
   cleanup()
+  window.history.replaceState(null, '', '/')
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
   vi.useRealTimers()

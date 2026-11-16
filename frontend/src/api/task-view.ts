@@ -33,10 +33,12 @@ export function taskForScreen(analysis: Analysis, issues: Issue[]): TaskContext 
 }
 
 export function messageForScreen(analysis: Analysis): ChatMessage {
-  if (!analysis.result) throw new Error('Сервер не вернул результат разбора.')
+  if (!analysis.result || analysis.result_revision === null) throw new Error('Сервер не вернул результат разбора.')
   return {
     id: `${analysis.analysis_id}-v${analysis.result_revision}`,
     role: 'assistant',
+    analysisId: analysis.analysis_id,
+    revision: analysis.result_revision,
     text: analysis.result.plan.summary,
     findings: analysis.result.plan.findings,
     limitations: analysis.result.plan.limitations,
