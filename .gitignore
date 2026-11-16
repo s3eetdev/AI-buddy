@@ -13,3 +13,8 @@ artifacts/tmp*/
 artifacts/demo-result.json
 artifacts/evaluation/
 artifacts/demo-jira.sqlite3*
+artifacts/coverage/frontend/**
+!artifacts/coverage/frontend/coverage-summary.json
+!artifacts/coverage/frontend/lcov.info
+artifacts/coverage/go/index.html
+backend/coverage.out

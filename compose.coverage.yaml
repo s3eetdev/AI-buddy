@@ -1,0 +1,31 @@
+# Additional test service; does not change the running application or call an LLM.
+services:
+  backend-tests:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: build
+    working_dir: /workspace/backend
+    environment:
+      CGO_ENABLED: "0"
+      TEST_DATABASE_URL: postgres://${POSTGRES_USER:-navigator}:${POSTGRES_PASSWORD:-navigator}@postgres:5432/${POSTGRES_DB:-navigator}?sslmode=disable
+    volumes:
+      - .:/workspace:ro
+      - ./artifacts/coverage:/reports
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - sh
+      - -ec
+      - |
+        mkdir -p /reports/go
+        if go test -count=1 -json -coverpkg=./... -coverprofile=/reports/go/coverage.out ./... > /reports/go/tests.json; then
+          go tool cover -func=/reports/go/coverage.out > /reports/go/functions.txt
+          go tool cover -html=/reports/go/coverage.out -o /reports/go/index.html
+          go vet ./...
+          cat /reports/go/functions.txt
+        else
+          cat /reports/go/tests.json
+          exit 1
+        fi

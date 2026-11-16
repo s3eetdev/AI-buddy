@@ -10,7 +10,8 @@
 
 ## Состав и зависимости
 
-- `frontend/`: React + TypeScript + Vite; Node.js **22.12+**, npm.
+- `frontend/`: React + TypeScript + Vite; Node.js **22.22.2+ (ветка 22)**,
+  **24.15+ (ветка 24)** или **26+**, npm. Требование учитывает jsdom для UI-тестов.
 - `backend/`: Go API и асинхронный worker; Go **1.25**, PostgreSQL **16**.
 - `navigator/`: Python **3.12**, FastAPI, поиск, LLM и проверка цитат.
 - Для основного запуска: Docker Desktop / Engine с Linux-контейнерами и Compose v2.
@@ -109,6 +110,25 @@ CLI и оценивание Python: [docs/demo.md](docs/demo.md).
 
 ## Автоматические проверки
 
+Полный воспроизводимый прогон покрытия на Windows (Python 3.12 с зависимостями,
+Node.js и Docker; локальный Go не нужен):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/verify-coverage.ps1
+```
+
+Сначала создайте `.venv` и установите Python-зависимости командами ниже. Перед
+прогоном остановите Vite: `npm ci` на Windows не может заменить загруженный native-модуль.
+Скрипт запускает Python-тесты, npm ci, API/UI-тесты и сборку frontend, затем Go-тесты
+с PostgreSQL в Docker и `go vet`. Платных вызовов LLM нет. Каждый SQL-тест использует
+свою временную схему. Существующие данные приложения не удаляются.
+
+Общий отчёт: [artifacts/coverage/summary.json](artifacts/coverage/summary.json).
+Порог — **81% для каждого компонента**, включая Go entrypoint, React-компоненты
+и Python CLI. При недостающем исходном файле, пропуске SQL-теста или недостижении
+порога скрипт завершается ошибкой. Методика и результаты:
+[artifacts/verification.md](artifacts/verification.md).
+
 Frontend, из корня:
 
 ```powershell
@@ -117,7 +137,7 @@ npm ci
 npm test
 npm run build
 npm run lint
-node --experimental-strip-types --experimental-test-coverage --test tests/*.test.mjs
+npm run test:coverage
 cd ..
 ```
 
@@ -143,9 +163,10 @@ cd ..
 ```
 
 SQL-тесты создают и удаляют отдельные схемы; нужны соответствующие права.
-Без `TEST_DATABASE_URL` SQL-проверки пропускаются. При других параметрах БД
-скорректируйте URL. Покрытие frontend измерено только для загруженных API-модулей,
-без React-компонентов. Покрытие Python не является покрытием всего приложения.
+Без `TEST_DATABASE_URL` отдельная команда `go test` пропускает SQL-проверки;
+полный скрипт выше задаёт подключение и проверяет отсутствие пропусков.
+При других параметрах БД скорректируйте URL. Vitest включает все `src/**/*.ts`
+и `src/**/*.tsx`, кроме деклараций типов; неисполненный entrypoint остаётся в знаменателе.
 Результаты и ограничения: [artifacts/verification.md](artifacts/verification.md).
 
 ## Диагностика

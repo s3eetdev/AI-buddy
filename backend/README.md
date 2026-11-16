@@ -110,6 +110,20 @@ Mock-публикация синхронна: план и квитанция у�
 
 ## Проверки
 
+Go можно проверить без локальной установки через тестовый сервис Docker:
+
+```powershell
+# Из корня репозитория. Запускается PostgreSQL и тестовый контейнер, не live LLM.
+docker compose -f compose.yaml -f compose.coverage.yaml run --build --rm backend-tests
+```
+
+Сервис исполняет SQL-тесты в отдельных схемах, `go vet` и сохраняет native-профиль,
+JSON-журнал тестов, функции и HTML в `artifacts/coverage/go/`. Полный прогон с
+проверкой порога и покрытия Python/frontend: `tools/verify-coverage.ps1`.
+Тест жизненного цикла сервера использует Unix-сигналы; для полного покрытия
+на Windows используйте этот Docker-вариант. При нативном запуске на Windows
+этот тест явно пропускается.
+
 ```powershell
 Set-Location backend
 $env:TEST_DATABASE_URL = 'postgres://navigator:navigator@127.0.0.1:5433/navigator?sslmode=disable'
